@@ -4,66 +4,31 @@ import numpy as np
 import datetime as dt
 print("modules imported")
 
-"""
-def _prep_ewa():
-    #meta
-    meta= _load_attributes(opt='ewa')
-    idxs= meta.index.values
-
-    #runoff data
-    daterange= pd.date_range(start='1984-01-01', end='2007-12-31', freq='D')
-    daterange= daterange[~((daterange.month == 2) & (daterange.day == 29))]
-    runoff= pd.read_csv('/home/osungmin/data/ewa/timeseries/runoff_catchments_europe_1984-2007', header=None, names=["runoff"])
-
-    #to check
-    len_runoff=len(runoff)/float((len(idxs)))
-    print("  total runoff data len", len(runoff), "runoff len / idx num", len_runoff, "==", len(daterange))
-    print("  number of catchments:", len(idxs))
-    wait=input()
-
-    for idx in range(len(idxs)):
-        df= pd.DataFrame(index=daterange, 
-				               columns=["runoff"])
-        st_idx, end_idx = (idx)*len(df), (idx+1)*len(df)
-        df.loc[:, "runoff"] = runoff.values[st_idx: end_idx]
-
-  
-        print("  ", idx, len(df), st_idx, end_idx)
-        df.to_csv("/home/osungmin/data/ewa/timeseries/ewa_"+idxs[idx]+".csv",
-	               header=True, index=True, na_rep=-9999)
-"""
 
 def _load_attributes(opt=None):
-	if opt=="ewa":
-		f='/home/osungmin/data/ewa/meta/EWA_metadata.csv'
-		load=pd.read_csv(f, header=0, index_col=0, sep=',', encoding='cp1252')
-		load=load[load["Quality"]==1]
-	else:
-		f0='/home/osungmin/data/caravan/caravan/attributes/'+opt+'/attributes_caravan_'+opt+'.csv'
-		load0=pd.read_csv(f0, header=0, index_col=0)
-		f1='/home/osungmin/data/caravan/caravan/attributes/'+opt+'/attributes_hydroatlas_'+opt+'.csv'
-		load1=pd.read_csv(f1, header=0, index_col=0)
-		load=pd.concat([load0, load1], axis=1).dropna()
-		print(" to check", load0.shape, load1.shape, load.shape)
+	f0='your_path_to_caravan/caravan/attributes/'+opt+'/attributes_caravan_'+opt+'.csv'
+	load0=pd.read_csv(f0, header=0, index_col=0)
+	f1='your_path_to_caravan/caravan/attributes/'+opt+'/attributes_hydroatlas_'+opt+'.csv'
+	load1=pd.read_csv(f1, header=0, index_col=0)
+	load=pd.concat([load0, load1], axis=1).dropna()
+	print(" to check", load0.shape, load1.shape, load.shape)
 	print(" __ loading attributes", opt)
 	return(load)
 
 
 def _load_runoff(opt=None, gauge_id=None):
-	if opt=="ewa": 
-		f='/home/osungmin/data/ewa/timeseries/ewa_'+gauge_id+'.csv'
-		load=pd.read_csv(f, header=0, index_col=0, parse_dates=True, sep=',', na_values=-9999)
-	else:
-		f='/home/osungmin/data/caravan/caravan/timeseries/csv/'+opt+'/'+gauge_id+'.csv'
-		load=pd.read_csv(f, header=0, index_col=0, parse_dates=True, sep=',')
-		load=load['streamflow'].copy()
+	f='your_path_to_caravan/caravan/timeseries/csv/'+opt+'/'+gauge_id+'.csv'
+	load=pd.read_csv(f, header=0, index_col=0, parse_dates=True, sep=',')
+	load=load['streamflow'].copy()
 		
 	print(" __ loading time series", opt, gauge_id)
+	#time period can be adjusted
 	load=load[(load.index>=dt.datetime(1990,1,1))&(load.index<=dt.datetime(2019,12,31))].copy()
 	return(load)
 
 
 def compute_mean_runoff(df):
+	#i will take mean of runoff (area-weighted) if there are multiple runoff observations at a grid pixel
 	check= 0
 	len_check= []
 
@@ -95,6 +60,7 @@ def compute_mean_runoff(df):
 
 def gridded(idx_lats, idx_lons):
 	#to find idxs nearest to lon/lat points
+	#resolution can be adjusted
 	dlats=np.arange(89.875, -90, -0.25)
 	dlons=np.arange(-179.875, 180, 0.25) 
 	
@@ -141,7 +107,7 @@ def _prep_meta(opts):
 	meta=meta[(meta['area']>=100)&(meta['area']<=3000)].copy()     
 
 	print(" > saving")
-	meta.to_csv("/home/osungmin/data/runoff/meta/meta_runoff.df", index=False, na_rep=-9999.)
+	meta.to_csv("your_path_to_save_list/meta_runoff.df", index=False, na_rep=-9999.)
 	return(meta)
 
 
@@ -154,8 +120,8 @@ def _save_outs(outs, info):
 
 def collect_runoff():
 	#
-	meta=pd.read_csv("/home/osungmin/data/runoff/meta/meta_runoff.df", header=0, index_col=0)
-	outpath="/home/osungmin/data/runoff/caravan_runoff/"
+	meta=pd.read_csv("your_path_to_save_list/meta_runoff.df", header=0, index_col=0)
+	outpath="your_path_to_save_runoff/caravan_runoff/"
 
 	##to create meta data for collected runoff
 	keys=['idx','source','avg','nday']
@@ -171,19 +137,22 @@ def collect_runoff():
 		#
 		_runoff_selected=False
 
-		if len(_grids)==1: #
+		if len(_grids)==1: # only one observatino per a grid pixel => i will take it. 
 
 			runoff=_load_runoff(_grids['source'][0], _grids.index[0])
-			if len(runoff.dropna())>=10*365: 
+			if len(runoff.dropna())>=10*365:  #i will take data with >=10 yr record
 				if np.nanmin(runoff)<0:
 					runoff[runoff<0]=np.nan
 					print(" error in runoff 1 ",idx)
 					
 				runoff.to_csv(outpath+"grid_"+idx+".dat", index=True, header=['QObs'], na_rep='-9999')
-				_runoff_selected=True	    
-		else:
-			# ===> if there are multiple GLOBAL pixels => average over the grid pixel
+				_runoff_selected=True	 
+				
+		else: # there are multiple observations per a grid pixel  
+			
+			# i will take an average of the multiple observations 
 			runoff, len_check = compute_mean_runoff(_grids)
+			
 			if len(runoff.dropna())>=10*365:
 				print("mean", idx)
 				if np.nanmin(runoff["mean"])<0:
@@ -212,18 +181,12 @@ def collect_runoff():
 	#
 	print("done")
 	meta=pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in outs.items()]))
-	meta.to_csv("/home/osungmin/data/runoff/meta/meta_runoff_selected.df", index=False, na_rep=-9999.)
+	meta.to_csv("your_path_to_save_list/meta_runoff_selected.df", index=False, na_rep=-9999.)
 
-
-
-
-#####
-#one time script to extract runoff from ewa
-#_prep_ewa()
-#####
 
 #####
 locs=["camels","camelsaus","camelsbr","camelscl","camelsgb","hysets","lamah"]
+
 #####
 print("***** prepare meta *****")
 meta = _prep_meta(locs)
@@ -232,7 +195,8 @@ print(meta.describe())
 print("len of unique grids")
 print(len(np.unique(meta['grid'])))
 print()
-wait=input()
+#####
+
 
 ######
 print("***** collect runoff *****")

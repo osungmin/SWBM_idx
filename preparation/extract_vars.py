@@ -8,17 +8,10 @@ import numpy as np
 import datetime
 from netCDF4 import Dataset
 
-def load_idxs(): #observation per grid cell (idxs are averaged)
-    path = '/Net/Groups/BGI/scratch/suo/ml_paras/meta/obs_d25.lis'
+def load_idxs(): #you create this list from prep_list.py
+    path = 'your_path_to_runoff_lat_lon_list/obs_d25.lis'
     load = pd.read_csv(path, header=0, index_col=0, sep=',')
     return (load.index)
-
-#def _load_ewa(): #let me test with eu catchments
-#    path = '/Net/Groups/BGI/people/sungmino/runoff_data/EWA_metadata_v1.csv'
-#    load = pd.read_csv(path, header=0, index_col=0, sep=',', encoding='cp1252')
-#    load = load[load["Quality"]==1].copy()  #only best quality catchments
-#    return (load)
-
 
 def create_daterange(date0, date1, freq):
     start = datetime.datetime.strptime(date0, '%Y-%m-%d')
@@ -33,47 +26,35 @@ idxs = load_idxs()
 lats = [float(x.split("_")[0]) for x in idxs]
 lons = [float(x.split("_")[1]) for x in idxs]
 ####################
-#idxs = _load_ewa() # to test at each idx
-#lats = [float(x) for x in idxs.Latitude]
-#lons = [float(x) for x in idxs.Longitude]
-#idxs= idxs.index
-####################
-daterange = create_daterange("1980-01-01", "2014-12-31", "D")[1] #era
-vars = ["tp", "t2m", "snr"] #mm/day, kelven, net radiation, MJ m2
+daterange = create_daterange("1980-01-01", "2014-12-31", "D")[1] #adjust time range as you want
+vars = ["rr", "tg", "snr"] #mm/day, kelven, net radiation, MJ m2 #three inputs for the model
 ###################
-in_path  ="/Net/Groups/data_BGC/era5/e1/0d25_daily/"
-out_path ="/Net/Groups/BGI/scratch/suo/ml_paras/forcing/"
+in_path  ="your_path_to_input_netcdfs"
+out_path ="your_path_to_save_output"
 ###################
-print("")
+print()
 print("***** extracting forcing data")
 print(" > input:", in_path)
 print(" > output:",out_path)
 print()
-print(idxs)
+print(len(idxs))
 wait=input()
-
-#test
-#in_path='/Net/Groups/BGI/work_3/HydroBioClim/data/E-OBS_v20_0d25/v20/'
 
 
 for v in vars:
     print()
     print ("  working on variable >>>", v)
 
-    if v=="tp":  var_path ="tp/tp.daily.fc.era5.1440.720."
-    if v=="t2m": var_path ="t2m/t2m.daily.an.era5.1440.720."
+    #file name for each varaible
+    if v=="rr":  var_path ="rr/rr_ens_mean_0.25deg_reg_v20.0e."
+    if v=="tg": var_path ="tg/tg_ens_mean_0.25deg_reg_v20.0e."
     if v=="snr": var_path ="snr/snr.daily.calc.era5.1440.720."
-
-    # test
-    #if v=="rr":  var_path ="rr/rr_ens_mean_0.25deg_reg_v20.0e."
-    #if v=="tg": var_path ="tg/tg_ens_mean_0.25deg_reg_v20.0e."
-    # 
-
 
     nc_files=[]
 
     for yr in np.unique(daterange.year):
 
+        #open netcdf file for each year
         f1 = Dataset(in_path+var_path+str(yr)+".nc")
         nc = (f1.variables[v][:,:,:]).filled(np.nan)
         print(yr, nc.shape)
@@ -87,11 +68,10 @@ for v in vars:
 
     print ("done.:", len(nc_files))
     print (". . . appending")
-    append     = np.concatenate(nc_files, axis=0)
+    append  = np.concatenate(nc_files, axis=0)
 
     print (". . . netcdf2array ready to extract idxs:", append.shape)
     print ()
-
 
     #extracing values
     for idx in range(len(idxs)):
@@ -103,8 +83,8 @@ for v in vars:
           print (" alreay prepared!!!")
           continue
 
-       df=pd.DataFrame(index=daterange, columns=[v]) #output tong
-
+       #output dataframe; i will save extracted variables in this dataframe
+       df=pd.DataFrame(index=daterange, columns=[v]) 
 
        lat_idx = (np.abs(datalats - target["lat"])).argmin()
        lon_idx = (np.abs(datalons - target["lon"])).argmin()
@@ -112,21 +92,22 @@ for v in vars:
 
        df[v]  = append[:,lat_idx,lon_idx]
 
-       if v=="t2m": df[v]=df[v]-273.15 #deg C
+       if v=="tg": df[v]=df[v]-273.15 #deg C
         
-       df = df[~((df.index.month == 2) & (df.index.day == 29))]
+       df = df[~((df.index.month == 2) & (df.index.day == 29))] #to remove feb 29
 
+       #precipitation data in a netcdf file could have negative values due to format issue. 
        if v in ["tp","rr"]:
           df.loc[df[v] < 0.0001, v] =0.
-
-
+            
+       #saving extracted values
        df.to_csv(out_path+v+"/"+v+"_"+idxs[idx]+".dat", 
                  float_format='%.5f', 
                  index=True, header=True, 
                  sep=",", na_rep=-9999) 
 
-       #to check
-       if (df.count()[0] != 365*35):
+       #just to to check
+       if (df.count()[0] != 365*len(np.unique(daterange.year)):
            print ("missing data included !!??", idxs[idx], v)
            print (df.describe())
            wait=input()

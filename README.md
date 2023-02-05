@@ -15,5 +15,5 @@ More studies where SWBM is used.
  
 ## model run
 
- 1. run_swbm.py: a python script to create random parameters (for model calibration), prepare run scripts (in R), and excute the run scripts.
+ 1. run_swbm.py: a python script to create random parameters (for model calibration), prepare run scripts, and excute the run scripts.
  2. swbm.r: the SWBM model itself, written in R.
